@@ -1,0 +1,291 @@
+// Prisma schema for FleetFlow - PostgreSQL Data Model
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  DISPATCHER
+  WAREHOUSE_MANAGER
+  DRIVER
+  CUSTOMER
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+}
+
+enum ShipmentStatus {
+  CREATED
+  PICKUP_SCHEDULED
+  PICKED_UP
+  AT_WAREHOUSE
+  PROCESSING
+  OUT_FOR_DELIVERY
+  DELIVERED
+  DELIVERY_FAILED
+  RESCHEDULED
+  CANCELLED
+}
+
+enum DriverStatus {
+  AVAILABLE
+  ON_DELIVERY
+  OFF_DUTY
+  ON_LEAVE
+  SUSPENDED
+}
+
+enum VehicleType {
+  Bike
+  Van
+  Truck
+  Mini_Truck
+  Container
+  Electric_Vehicle
+}
+
+enum VehicleStatus {
+  AVAILABLE
+  ASSIGNED
+  ON_TRIP
+  MAINTENANCE
+  INACTIVE
+}
+
+enum FuelType {
+  Electric
+  Diesel
+  Petrol
+  CNG
+}
+
+model User {
+  id           String      @id @default(uuid())
+  firstName    String
+  lastName     String
+  email        String      @unique
+  phone        String
+  password     String
+  role         UserRole    @default(CUSTOMER)
+  status       UserStatus  @default(ACTIVE)
+  profileImage String?
+  lastLogin    DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  driver       Driver?
+  auditLogs    AuditLog[]
+}
+
+model Customer {
+  id              String     @id @default(uuid())
+  name            String
+  company         String?
+  email           String     @unique
+  phone           String
+  billingAddress  String?
+  shippingAddress String?
+  shipments       Shipment[]
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+}
+
+model Warehouse {
+  id                   String     @id @default(uuid())
+  name                 String
+  code                 String     @unique
+  address              String
+  latitude             Float
+  longitude            Float
+  capacityTons         Float
+  currentOccupancyTons Float      @default(0)
+  baysCount            Int        @default(8)
+  managerName          String
+  phone                String
+  shipments            Shipment[]
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+}
+
+model Vehicle {
+  id                   String            @id @default(uuid())
+  registrationNumber   String            @unique
+  vehicleType          VehicleType
+  model                String
+  manufacturer         String
+  year                 Int
+  fuelType             FuelType
+  capacityKg           Float
+  status               VehicleStatus     @default(AVAILABLE)
+  mileageKm            Float             @default(0)
+  fuelOrBatteryPercent Float             @default(100)
+  latitude             Float?
+  longitude            Float?
+  insuranceExpiry      DateTime
+  fitnessExpiry        DateTime
+  pucExpiry            DateTime
+  driverId             String?           @unique
+  driver               Driver?           @relation(fields: [driverId], references: [id])
+  maintenance          VehicleMaintenance[]
+  shipments            Shipment[]
+  routes               DeliveryRoute[]
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+}
+
+model Driver {
+  id                   String          @id @default(uuid())
+  userId               String          @unique
+  user                 User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  licenseNumber        String          @unique
+  licenseExpiry        DateTime
+  experienceYears      Int             @default(1)
+  status               DriverStatus    @default(AVAILABLE)
+  latitude             Float?
+  longitude            Float?
+  speedKmH             Float           @default(0)
+  headingDegrees       Float           @default(0)
+  totalDeliveries      Int             @default(0)
+  successfulDeliveries Int             @default(0)
+  failedDeliveries     Int             @default(0)
+  onTimeRate           Float           @default(100)
+  customerRating       Float           @default(5.0)
+  distanceTravelledKm  Float           @default(0)
+  vehicle              Vehicle?
+  shipments            Shipment[]
+  routes               DeliveryRoute[]
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+}
+
+model Shipment {
+  id                   String            @id @default(uuid())
+  trackingNumber       String            @unique
+  customerId           String
+  customer             Customer          @relation(fields: [customerId], references: [id])
+  warehouseId          String
+  warehouse            Warehouse         @relation(fields: [warehouseId], references: [id])
+  driverId             String?
+  driver               Driver?           @relation(fields: [driverId], references: [id])
+  vehicleId            String?
+  vehicle              Vehicle?          @relation(fields: [vehicleId], references: [id])
+  routeId              String?
+  route                DeliveryRoute?    @relation(fields: [routeId], references: [id])
+  pickupAddress        String
+  deliveryAddress      String
+  pickupLat            Float
+  pickupLng            Float
+  deliveryLat          Float
+  deliveryLng          Float
+  packageType          String
+  weightKg             Float
+  dimensions           String
+  priority             String            @default("STANDARD")
+  expectedDeliveryDate DateTime
+  status               ShipmentStatus    @default(CREATED)
+  failureReason        String?
+  proofOfDelivery      ProofOfDelivery?
+  statusHistory        ShipmentHistory[]
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+}
+
+model ShipmentHistory {
+  id          String         @id @default(uuid())
+  shipmentId  String
+  shipment    Shipment       @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  status      ShipmentStatus
+  note        String?
+  updatedBy   String
+  location    String?
+  timestamp   DateTime       @default(now())
+}
+
+model ProofOfDelivery {
+  id              String    @id @default(uuid())
+  shipmentId      String    @unique
+  shipment        Shipment  @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  recipientName   String
+  otpVerified     Boolean   @default(false)
+  otpCode         String?
+  signatureBase64 String?
+  photoUrl        String?
+  latitude        Float
+  longitude       Float
+  notes           String?
+  timestamp       DateTime  @default(now())
+}
+
+model DeliveryRoute {
+  id                  String       @id @default(uuid())
+  name                String
+  driverId            String
+  driver              Driver       @relation(fields: [driverId], references: [id])
+  vehicleId           String
+  vehicle             Vehicle      @relation(fields: [vehicleId], references: [id])
+  status              String       @default("DRAFT")
+  totalDistanceKm     Float        @default(0)
+  estimatedMinutes    Int          @default(0)
+  startWarehouseName  String
+  endWarehouseName    String
+  stops               RouteStop[]
+  shipments           Shipment[]
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+}
+
+model RouteStop {
+  id               String        @id @default(uuid())
+  routeId          String
+  route            DeliveryRoute @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  shipmentId       String
+  recipientName    String
+  address          String
+  latitude         Float
+  longitude        Float
+  sequence         Int
+  estimatedArrival DateTime
+  actualArrival    DateTime?
+  status           String        @default("PENDING")
+  packageType      String
+  weightKg         Float
+}
+
+model VehicleMaintenance {
+  id              String    @id @default(uuid())
+  vehicleId       String
+  vehicle         Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  serviceType     String
+  scheduledDate   DateTime
+  completedDate   DateTime?
+  cost            Float     @default(0)
+  invoiceNumber   String?
+  status          String    @default("SCHEDULED")
+  notes           String?
+  nextServiceDate DateTime
+  createdAt       DateTime  @default(now())
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?
+  actorEmail String
+  actorName  String
+  actorRole  UserRole
+  user       User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action     String
+  resource   String
+  resourceId String
+  oldValue   String?
+  newValue   String?
+  ipAddress  String
+  timestamp  DateTime @default(now())
+}

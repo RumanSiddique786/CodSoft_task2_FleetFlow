@@ -1,0 +1,22 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: fleetflow_postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: fleetflow
+      POSTGRES_PASSWORD: fleetpassword123
+      POSTGRES_DB: fleetflow_db
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: fleetflow_redis
+    ports:
+      - "6379:6379"
+
+volumes:
+  pgdata:
